@@ -1,29 +1,27 @@
-# Masaüstü Saati
+# Desktop Clock for Windows
 
-Windows 11 için Rust ile yazılmış, tek iş parçacıklı bir Win32 masaüstü saati. Windows’un yerel saatini 24 saat biçiminde gösterir. Saniyeler kapalıyken saati dakikada bir, açıkken saniyede bir günceller.
+[**Türkçe**](README.tr.md)
 
-## Kullanım
+A lightweight desktop clock for Windows 11, written in Rust with native Win32 APIs. It displays local time in 24-hour format and updates once a minute by default. Enable seconds to update once a second.
 
-- `MasaustuSaati.exe` dosyasını açın. Varsayılan konum ana ekranın üst ortasıdır.
-- Yerini değiştirmek için saati sol tuşla sürükleyin.
-- **Arka plan saydamlığı**, **Saniyeleri göster**, **Başlangıç konumu** ve **Kapat** seçenekleri için saatin üzerinde sağ tıklayın. Arka plan %100 saydamken rakamlara sağ tıklayın.
-- **Son konum**, saatin sürüklenerek bırakıldığı yeri bir sonraki açılış için kaydeder. Ayarlar `%LOCALAPPDATA%\MasaustuSaati\settings.txt` dosyasına yazılır.
+## Getting started
 
-## Seçenekler
+Run `MasaustuSaati.exe`. The clock opens at the top center of the primary display by default. Drag it to move it, or right-click for quick settings and **Options**. At 100% background transparency, right-click a digit to open the menu.
 
-- **Genel** bölümünde Windows oturumu açıldığında saatin çalışmasını ve saniye gösterimini açıp kapatabilirsiniz. Windows başlangıç seçeneği geçerli kullanıcı hesabına uygulanır.
-- **Görünüm** bölümünde yazı tipini, saat/dakika/saniye boyutlarını, rakam ve arka plan renklerini, saydamlığı değiştirebilirsiniz. Sağdaki önizleme değişiklikleri anında gösterir.
-- **Konum** bölümünde bağlı ekranlar Windows’taki yerleşimleriyle görünür. Saat işaretini haritada sürükleyin veya ekran ve hizalama seçin. Kenara tam yaslamak için boşluğu 0 piksel yapın. Açıyı derece olarak yazın veya **45° uygula** düğmesini kullanın.
-- **Kaydet** değişiklikleri masaüstündeki saate uygular. Seçenekler penceresini kapatmak ve **Vazgeç** taslağı bırakır.
+## Options
 
-Space Mono Bold yazı tipi uygulamaya gömülüdür. Yazı tipinin [SIL Open Font License 1.1](assets/Space-Mono-LICENSE.txt) metni kaynak paketinde yer alır.
+- **General** sets whether the clock starts at Windows sign-in and whether seconds appear.
+- **Appearance** lets you choose a font, set separate sizes for hours, minutes, and seconds, change digit and background colors, and adjust transparency. The live preview shows changes immediately.
+- **Position** shows the connected displays in their Windows layout. Drag the clock on the map or choose an alignment. Set the inset to 0 px to dock flush with the edge. Enter an angle or use the 45° shortcut.
 
-## Derleme
+Select **Save** to apply changes. Settings are stored in `%LOCALAPPDATA%\MasaustuSaati\settings.txt`. The program includes Space Mono Bold under the [SIL Open Font License 1.1](assets/Space-Mono-LICENSE.txt).
 
-Windows üzerinde Rust ve Microsoft C++ Build Tools ile:
+## Build
+
+On Windows, install Rust and the Microsoft C++ Build Tools, then run:
 
 ```powershell
 cargo build --locked --release
 ```
 
-Çalıştırılabilir dosya `target/release/MasaustuSaati.exe` konumuna yazılır.
+The executable is created at `target/release/MasaustuSaati.exe`.

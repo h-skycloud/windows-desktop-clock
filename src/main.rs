@@ -38,15 +38,15 @@ const CLOSE_COMMAND: usize = 2;
 const OPTIONS_COMMAND: usize = 3;
 const TRANSPARENCY_COMMAND: usize = 10;
 const POSITION_COMMAND: usize = 20;
-const TRANSPARENCY_LABELS: [PCWSTR; 5] = [w!("%0"), w!("%25"), w!("%50"), w!("%75"), w!("%100")];
+const TRANSPARENCY_LABELS: [PCWSTR; 5] = [w!("0%"), w!("25%"), w!("50%"), w!("75%"), w!("100%")];
 const POSITION_LABELS: [PCWSTR; 7] = [
-    w!("Üst orta"),
-    w!("Sol üst"),
-    w!("Sağ üst"),
-    w!("Alt orta"),
-    w!("Sol alt"),
-    w!("Sağ alt"),
-    w!("Son konum"),
+    w!("Top center"),
+    w!("Top left"),
+    w!("Top right"),
+    w!("Bottom center"),
+    w!("Bottom left"),
+    w!("Bottom right"),
+    w!("Last position"),
 ];
 
 struct Clock {
@@ -100,7 +100,7 @@ unsafe fn run() {
         let window = CreateWindowExW(
             WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_LAYERED,
             class_name,
-            w!("Masaüstü Saati"),
+            w!("Desktop Clock"),
             WS_POPUP,
             origin.x,
             origin.y,
@@ -381,8 +381,8 @@ fn save_settings(window: HWND, clock: &Clock, mut settings: Settings) {
         unsafe {
             MessageBoxW(
                 window,
-                w!("Ayarlar kaydedilemedi."),
-                w!("Masaüstü Saati"),
+                w!("Could not save settings."),
+                w!("Desktop Clock"),
                 MB_OK | MB_ICONWARNING,
             );
         }
@@ -534,7 +534,7 @@ fn show_menu(window: HWND, settings: Settings) {
                 menu,
                 MF_POPUP,
                 transparency as usize,
-                w!("Arka plan saydamlığı"),
+                w!("Background transparency"),
             ) == 0
             {
                 DestroyMenu(transparency);
@@ -544,7 +544,7 @@ fn show_menu(window: HWND, settings: Settings) {
             menu,
             MF_STRING | checked(settings.seconds),
             SECONDS_COMMAND,
-            w!("Saniyeleri göster"),
+            w!("Show seconds"),
         );
         let positions = CreatePopupMenu();
         if !positions.is_null() {
@@ -556,13 +556,13 @@ fn show_menu(window: HWND, settings: Settings) {
                     POSITION_LABELS[index],
                 );
             }
-            if AppendMenuW(menu, MF_POPUP, positions as usize, w!("Başlangıç konumu")) == 0 {
+            if AppendMenuW(menu, MF_POPUP, positions as usize, w!("Startup position")) == 0 {
                 DestroyMenu(positions);
             }
         }
         AppendMenuW(menu, MF_SEPARATOR, 0, null());
-        AppendMenuW(menu, MF_STRING, OPTIONS_COMMAND, w!("Seçenekler…"));
-        AppendMenuW(menu, MF_STRING, CLOSE_COMMAND, w!("Kapat"));
+        AppendMenuW(menu, MF_STRING, OPTIONS_COMMAND, w!("Options…"));
+        AppendMenuW(menu, MF_STRING, CLOSE_COMMAND, w!("Close"));
         SetForegroundWindow(window);
         TrackPopupMenu(menu, TPM_RIGHTBUTTON, cursor.x, cursor.y, 0, window, null());
         PostMessageW(window, WM_NULL, 0, 0);

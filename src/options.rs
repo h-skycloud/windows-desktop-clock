@@ -51,17 +51,17 @@ const APPLY: usize = 1;
 const CANCEL: usize = 2;
 const COMBO_PROC: PCWSTR = w!("MasaustuSaati.NativeComboProc");
 
-const TABS: [PCWSTR; 3] = [w!("Genel"), w!("Görünüm"), w!("Konum")];
+const TABS: [PCWSTR; 3] = [w!("General"), w!("Appearance"), w!("Position")];
 const DOCKS: [(PCWSTR, u16, u16); 9] = [
-    (w!("Sol üst"), 0, 0),
-    (w!("Üst orta"), 500, 0),
-    (w!("Sağ üst"), 1000, 0),
-    (w!("Sol kenar"), 0, 500),
-    (w!("Orta"), 500, 500),
-    (w!("Sağ kenar"), 1000, 500),
-    (w!("Sol alt"), 0, 1000),
-    (w!("Alt orta"), 500, 1000),
-    (w!("Sağ alt"), 1000, 1000),
+    (w!("Top left"), 0, 0),
+    (w!("Top center"), 500, 0),
+    (w!("Top right"), 1000, 0),
+    (w!("Left edge"), 0, 500),
+    (w!("Center"), 500, 500),
+    (w!("Right edge"), 1000, 500),
+    (w!("Bottom left"), 0, 1000),
+    (w!("Bottom center"), 500, 1000),
+    (w!("Bottom right"), 1000, 1000),
 ];
 
 struct Child {
@@ -121,7 +121,7 @@ pub fn open(clock: HWND, mut draft: Settings) -> HWND {
         let window = CreateWindowExW(
             WS_EX_APPWINDOW,
             name,
-            w!("Masaüstü Saati — Seçenekler"),
+            w!("Desktop Clock — Options"),
             style,
             area.left + (area.right - area.left - width) / 2,
             area.top + (area.bottom - area.top - height) / 2,
@@ -285,7 +285,7 @@ impl Options {
             STARTUP,
             Some(0),
             button,
-            w!("Windows açılışında çalıştır"),
+            w!("Start with Windows"),
             button_style,
             view::rect(229, 181, 624, 64),
         );
@@ -294,7 +294,7 @@ impl Options {
             SECONDS,
             Some(0),
             button,
-            w!("Saniyeleri göster"),
+            w!("Show seconds"),
             button_style,
             view::rect(229, 255, 624, 64),
         );
@@ -332,7 +332,7 @@ impl Options {
             INK,
             Some(1),
             button,
-            w!("Rakam rengi"),
+            w!("Digit color"),
             button_style,
             view::rect(232, 429, 128, 34),
         );
@@ -341,7 +341,7 @@ impl Options {
             BACKGROUND,
             Some(1),
             button,
-            w!("Arka plan rengi"),
+            w!("Background color"),
             button_style,
             view::rect(376, 429, 128, 34),
         );
@@ -386,7 +386,7 @@ impl Options {
             ANGLE_45,
             Some(2),
             button,
-            w!("45° uygula"),
+            w!("Apply 45°"),
             button_style,
             view::rect(746, 452, 99, 32),
         );
@@ -395,7 +395,7 @@ impl Options {
             CANCEL,
             None,
             button,
-            w!("Vazgeç"),
+            w!("Cancel"),
             button_style,
             view::rect(648, 540, 94, 34),
         );
@@ -404,7 +404,7 @@ impl Options {
             APPLY,
             None,
             button,
-            w!("Kaydet"),
+            w!("Save"),
             button_style,
             view::rect(754, 540, 114, 34),
         );
@@ -418,7 +418,7 @@ impl Options {
                     face.0.as_ptr() as LPARAM,
                 );
             }
-            SendMessageW(self.control(DOCK), CB_ADDSTRING, 0, w!("Serbest") as LPARAM);
+            SendMessageW(self.control(DOCK), CB_ADDSTRING, 0, w!("Free placement") as LPARAM);
             for (label, _, _) in DOCKS {
                 SendMessageW(self.control(DOCK), CB_ADDSTRING, 0, label as LPARAM);
             }
@@ -577,7 +577,7 @@ impl Options {
             for screen in &*screens {
                 let mut label = screen_name(screen);
                 if screen.main {
-                    label.push_str(" · Ana");
+                    label.push_str(" · Primary");
                 }
                 let label = wide(&label);
                 SendMessageW(control, CB_ADDSTRING, 0, label.as_ptr() as LPARAM);
@@ -723,8 +723,8 @@ impl Options {
                 unsafe {
                     MessageBoxW(
                         window,
-                        w!("Bir değer izin verilen aralığın dışında. İşaretlenen alanı düzelt."),
-                        w!("Seçenekler"),
+                        w!("A value is outside the allowed range. Correct the highlighted field."),
+                        w!("Options"),
                         MB_OK | MB_ICONWARNING,
                     );
                     SetFocus(self.control(id));
@@ -741,12 +741,12 @@ impl Options {
                 PostMessageW(window, WM_CLOSE, 0, 0);
             },
             Err(error) => {
-                let message = wide(&format!("Ayarlar kaydedilemedi. {error}"));
+                let message = wide(&format!("Could not save settings. {error}"));
                 unsafe {
                     MessageBoxW(
                         window,
                         message.as_ptr(),
-                        w!("Seçenekler"),
+                        w!("Options"),
                         MB_OK | MB_ICONWARNING,
                     );
                 }
@@ -919,7 +919,7 @@ fn wide(text: &str) -> Vec<u16> {
 
 fn screen_name(screen: &Display) -> String {
     let name = screen.id.name();
-    format!("Ekran {}", name.rsplit("DISPLAY").next().unwrap_or(&name))
+    format!("Display {}", name.rsplit("DISPLAY").next().unwrap_or(&name))
 }
 
 fn point(value: LPARAM) -> POINT {

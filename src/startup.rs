@@ -41,7 +41,7 @@ pub fn set(enabled: bool) -> io::Result<()> {
         if command.len() > 261 {
             return Err(io::Error::new(
                 io::ErrorKind::InvalidInput,
-                "Uygulamanın yolu çok uzun.",
+                "The executable path is too long.",
             ));
         }
         unsafe {

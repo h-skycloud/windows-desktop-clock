@@ -142,15 +142,15 @@ impl Options {
         canvas.fill(rect(0, 528, WIDTH, 1), BORDER);
         canvas.round(rect(21, 13, 30, 30), 10, ACCENT_BUTTON, ACCENT_BUTTON);
         canvas.icon(Icon::Clock, rect(21, 13, 30, 30), PAPER);
-        canvas.label("Masaüstü Saati", rect(63, 14, 220, 28), TEXT);
+        canvas.label("Desktop Clock", rect(63, 14, 220, 28), TEXT);
 
         let (heading, description) = match self.page.get() {
-            0 => ("Genel", "Windows başlangıcı ve saat biçimi."),
+            0 => ("General", "Windows startup and time display."),
             1 => (
-                "Görünüm",
-                "Yazıyı, renkleri ve saydamlığı saat üzerinde gör.",
+                "Appearance",
+                "Preview the clock’s type, colors, and transparency.",
             ),
-            _ => ("Konum", "Saati ekranda sürükle veya bir kenara yasla."),
+            _ => ("Position", "Drag the clock or dock it to a screen edge."),
         };
         canvas.text(
             heading,
@@ -183,23 +183,23 @@ impl Options {
 
     fn paint_style(&self, canvas: &Canvas<'_>, damage: RECT) {
         canvas.card(rect(214, 169, 311, 347));
-        canvas.label("Yazı tipi", rect(232, 179, 270, 27), TEXT);
-        canvas.label("Rakam boyutları", rect(232, 245, 270, 22), TEXT);
-        for (index, label) in ["Saat", "Dakika", "Saniye"].into_iter().enumerate() {
+        canvas.label("Font", rect(232, 179, 270, 27), TEXT);
+        canvas.label("Digit sizes", rect(232, 245, 270, 22), TEXT);
+        for (index, label) in ["Hours", "Minutes", "Seconds"].into_iter().enumerate() {
             canvas.small(label, rect(232 + index as i32 * 93, 267, 82, 20), MUTED);
         }
-        canvas.label("Arka plan saydamlığı", rect(232, 323, 270, 24), TEXT);
+        canvas.label("Background transparency", rect(232, 323, 270, 24), TEXT);
         canvas.small("% · 0–100", rect(320, 356, 180, 32), MUTED);
-        canvas.label("Renkler", rect(232, 393, 270, 24), TEXT);
+        canvas.label("Colors", rect(232, 393, 270, 24), TEXT);
         canvas.small(
-            "Boyutlar 14–96 piksel arasında.",
+            "Sizes range from 14 to 96 pixels.",
             rect(232, 473, 270, 27),
             MUTED,
         );
 
         canvas.card(PREVIEW_CARD);
         canvas.icon(Icon::Eye, rect(565, 179, 19, 27), ACCENT_INK);
-        canvas.label("Canlı önizleme", rect(593, 179, 255, 27), TEXT);
+        canvas.label("Live preview", rect(593, 179, 255, 27), TEXT);
         let viewport = rect(565, 215, 285, 247);
         if intersects(scaled(viewport, canvas.dpi), damage) {
             canvas.fill(viewport, 0xf7f5f1);
@@ -227,14 +227,14 @@ impl Options {
             );
         }
         let style = self.draft.get().appearance;
-        canvas.color_key(565, "Rakam", style.ink);
-        canvas.color_key(712, "Arka plan", style.background);
+        canvas.color_key(565, "Digits", style.ink);
+        canvas.color_key(712, "Background", style.background);
     }
 
     fn paint_placement(&self, canvas: &Canvas<'_>) {
         canvas.card(MAP_CARD);
         canvas.icon(Icon::Display, rect(232, 179, 18, 29), ACCENT_INK);
-        canvas.label("Ekran yerleşimi", rect(258, 179, 583, 29), TEXT);
+        canvas.label("Display layout", rect(258, 179, 583, 29), TEXT);
         canvas.round(rect(231, 209, 620, 177), 12, 0xf0eeea, BORDER);
         let screens = self.screens.borrow();
         let settings = self.draft.get();
@@ -253,7 +253,7 @@ impl Options {
                 );
                 let mut label = screen_name(screen);
                 if screen.main {
-                    label.push_str(" · Ana ekran");
+                    label.push_str(" · Primary");
                 }
                 text(
                     canvas.dc,
@@ -293,22 +293,22 @@ impl Options {
             }
         } else {
             canvas.body(
-                "Windows bir ekran bildirmedi.",
+                "Windows did not report any displays.",
                 rect(246, 243, 580, 45),
                 MUTED,
             );
         }
         canvas.card(rect(214, 414, 654, 106));
         for (x, width, title) in [
-            (232, 162, "Ekran"),
-            (408, 136, "Hizalama"),
-            (558, 82, "Boşluk · px"),
-            (654, 76, "Açı · °"),
+            (232, 162, "Display"),
+            (408, 136, "Alignment"),
+            (558, 82, "Inset · px"),
+            (654, 76, "Angle · °"),
         ] {
             canvas.small(title, rect(x, 421, width, 26), TEXT);
         }
         canvas.small(
-            "0 px ile saati doğrudan kenara yaslayabilirsin.",
+            "Set the inset to 0 px to dock flush with the edge.",
             rect(232, 487, 610, 25),
             MUTED,
         );
@@ -324,12 +324,12 @@ impl Options {
         let s = |value| scale(value, dpi);
         let draft = self.draft.get();
         let label = match id {
-            NAV..=102 => ["Genel", "Görünüm", "Konum"][id - NAV],
-            INK => "Rakam",
-            BACKGROUND => "Arka plan",
+            NAV..=102 => ["General", "Appearance", "Position"][id - NAV],
+            INK => "Digits",
+            BACKGROUND => "Background",
             ANGLE_45 => "45°",
-            CANCEL => "Vazgeç",
-            APPLY => "Kaydet",
+            CANCEL => "Cancel",
+            APPLY => "Save",
             _ => "",
         };
         let pressed = state & ODS_SELECTED != 0;
@@ -383,19 +383,19 @@ impl Options {
                     (
                         self.startup.get().unwrap_or(false),
                         Icon::Power,
-                        "Windows açılışında çalıştır",
+                        "Start with Windows",
                         if self.startup.get().is_some() {
-                            "Windows oturumu açıldığında saati başlat."
+                            "Start the clock when you sign in to Windows."
                         } else {
-                            "Windows başlangıç ayarına erişilemedi."
+                            "Windows startup settings are unavailable."
                         },
                     )
                 } else {
                     (
                         draft.seconds,
                         Icon::Clock,
-                        "Saniyeleri göster",
-                        "Kapalıyken saat yalnızca dakika başında yenilenir.",
+                        "Show seconds",
+                        "When off, the clock updates once a minute.",
                     )
                 };
                 let background = if pressed { SUBTLE } else { PAPER };
@@ -440,7 +440,7 @@ impl Options {
                 text(
                     dc,
                     fonts.small,
-                    if enabled { "Açık" } else { "Kapalı" },
+                    if enabled { "On" } else { "Off" },
                     rect(x - s(66), middle - s(12), s(55), s(24)),
                     MUTED,
                     DT_RIGHT,
