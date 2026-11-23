@@ -10,6 +10,8 @@ Run `MasaustuSaati.exe`. The clock opens at the top center of the primary displa
 
 ## Stopwatch, countdown, and alarms
 
+Open **Options → Timers** to edit the panels' fonts, colors, and visibility, preview your changes, set the countdown duration, or add, edit, disable, and remove daily alarms. Select **Save** to apply the changes. Saving a different duration resets the countdown.
+
 - Select the **Stopwatch** or **Countdown** panel beneath the clock to start, pause, or resume it. Open the matching right-click submenu to reset the timer, change its font or color, or hide its panel.
 - Set a countdown duration in `HH:MM:SS` format under **Countdown → Set duration**. The clock shows a Windows alert when the countdown ends.
 - Select **Alarms → Add daily alarm** and enter local time in `HH:MM` format. Use the alarm's submenu to enable, disable, or remove it. Alarms repeat daily while the app is running and Windows is awake.

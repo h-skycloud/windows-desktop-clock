@@ -44,6 +44,39 @@ impl Default for TimerSettings {
     }
 }
 
+impl TimerSettings {
+    pub fn merge(self, original: Self, latest: Self) -> std::io::Result<Self> {
+        let alarms_changed = self.alarms != original.alarms;
+        if alarms_changed && latest.alarms != original.alarms && latest.alarms != self.alarms {
+            return Err(std::io::Error::other(
+                "Alarms changed from the clock menu. Reopen Options before editing them.",
+            ));
+        }
+        Ok(Self {
+            stopwatch: merge_panel(self.stopwatch, original.stopwatch, latest.stopwatch),
+            countdown: merge_panel(self.countdown, original.countdown, latest.countdown),
+            duration: keep_edit(self.duration, original.duration, latest.duration),
+            alarms: if alarms_changed {
+                self.alarms
+            } else {
+                latest.alarms
+            },
+        })
+    }
+}
+
+fn merge_panel(draft: PanelStyle, original: PanelStyle, latest: PanelStyle) -> PanelStyle {
+    PanelStyle {
+        visible: keep_edit(draft.visible, original.visible, latest.visible),
+        font: keep_edit(draft.font, original.font, latest.font),
+        color: keep_edit(draft.color, original.color, latest.color),
+    }
+}
+
+fn keep_edit<T: Eq>(draft: T, original: T, latest: T) -> T {
+    if draft == original { latest } else { draft }
+}
+
 #[derive(Clone, Copy, Default)]
 pub struct Stopwatch {
     elapsed: u64,
@@ -191,6 +224,28 @@ fn field(text: &str, limit: u32) -> Option<u32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn options_preserve_unedited_timer_fields_and_detect_alarm_conflicts() {
+        let original = TimerSettings::default();
+        let mut draft = original;
+        let mut latest = original;
+        draft.stopwatch.visible = false;
+        latest.stopwatch.color = 0x123456;
+        latest.alarms[0] = Some(Alarm {
+            minute: 7 * 60,
+            enabled: true,
+        });
+        let merged = draft.merge(original, latest).unwrap();
+        assert!(!merged.stopwatch.visible);
+        assert_eq!(merged.stopwatch.color, 0x123456);
+        assert_eq!(merged.alarms[0].unwrap().minute, 7 * 60);
+        draft.alarms[0] = Some(Alarm {
+            minute: 8 * 60,
+            enabled: false,
+        });
+        assert!(draft.merge(original, latest).is_err());
+    }
 
     #[test]
     fn stopwatch_excludes_paused_time() {

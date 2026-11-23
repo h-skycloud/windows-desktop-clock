@@ -1,10 +1,13 @@
+mod timer_page;
 mod view;
+use timer_page::*;
 
 use crate::{
     displays::{self, Display, Map},
     renderer, scale,
     settings::{FaceName, MAX_DIGIT_SIZE, MIN_DIGIT_SIZE, Position, Settings},
     startup,
+    timers::TimerSettings,
 };
 use std::{
     cell::{Cell, RefCell},
@@ -51,7 +54,12 @@ const APPLY: usize = 1;
 const CANCEL: usize = 2;
 const COMBO_PROC: PCWSTR = w!("MasaustuSaati.NativeComboProc");
 
-const TABS: [PCWSTR; 3] = [w!("General"), w!("Appearance"), w!("Position")];
+const TABS: [PCWSTR; 4] = [
+    w!("General"),
+    w!("Appearance"),
+    w!("Position"),
+    w!("Timers"),
+];
 const DOCKS: [(PCWSTR, u16, u16); 9] = [
     (w!("Top left"), 0, 0),
     (w!("Top center"), 500, 0),
@@ -74,6 +82,7 @@ struct Child {
 struct Options {
     clock: HWND,
     draft: Cell<Settings>,
+    original_timers: TimerSettings,
     page: Cell<usize>,
     loading: Cell<bool>,
     startup: Cell<Option<bool>>,
@@ -138,6 +147,7 @@ pub fn open(clock: HWND, mut draft: Settings) -> HWND {
         let options = Box::new(Options {
             clock,
             draft: Cell::new(draft),
+            original_timers: draft.timers,
             page: Cell::new(0),
             loading: Cell::new(false),
             startup: Cell::new(startup),
@@ -408,6 +418,7 @@ impl Options {
             button_style,
             view::rect(754, 540, 114, 34),
         );
+        self.create_timer_controls(window);
         self.layout_controls();
         unsafe {
             for face in &self.faces {
@@ -458,7 +469,7 @@ impl Options {
                 null(),
             )
         };
-        if matches!(id, FONT | SCREEN | DOCK) && !handle.is_null() {
+        if matches!(id, FONT | SCREEN | DOCK | ALARM_LIST) && !handle.is_null() {
             unsafe {
                 let original = GetWindowLongPtrW(handle, GWLP_WNDPROC);
                 if original != 0 && SetPropW(handle, COMBO_PROC, original as _) != 0 {
@@ -500,7 +511,7 @@ impl Options {
                 if numeric {
                     SendMessageW(child.handle, EM_SETLIMITTEXT, 4, 0);
                 }
-                if matches!(child.id, FONT | SCREEN | DOCK) {
+                if matches!(child.id, FONT | SCREEN | DOCK | ALARM_LIST) {
                     SendMessageW(
                         child.handle,
                         CB_SETITEMHEIGHT,
@@ -554,6 +565,7 @@ impl Options {
         );
         self.sync_screens();
         self.sync_dock();
+        self.sync_timer_controls(None);
         self.loading.set(false);
     }
 
@@ -641,6 +653,9 @@ impl Options {
     }
 
     fn command(&self, window: HWND, id: usize, event: u32) {
+        if self.timer_command(window, id, event) {
+            return;
+        }
         if numeric_field(id) && matches!(event, EN_SETFOCUS | EN_KILLFOCUS) {
             if let Some(child) = self.controls.borrow().iter().find(|child| child.id == id) {
                 let bounds = view::scaled(child.rect, self.density.get());
@@ -650,7 +665,7 @@ impl Options {
         }
         let mut draft = self.draft.get();
         match (id, event) {
-            (NAV..=102, BN_CLICKED) => {
+            (NAV..=103, BN_CLICKED) => {
                 self.change_page(window, id - NAV, true);
                 return;
             }
@@ -741,7 +756,7 @@ impl Options {
             .startup
             .get()
             .filter(|&value| Some(value) != self.original_startup);
-        match super::apply_options(self.clock, self.draft.get(), enabled) {
+        match super::apply_options(self.clock, self.draft.get(), self.original_timers, enabled) {
             Ok(()) => unsafe {
                 PostMessageW(window, WM_CLOSE, 0, 0);
             },

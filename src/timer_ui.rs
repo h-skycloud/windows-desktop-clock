@@ -163,8 +163,7 @@ pub fn command(window: HWND, clock: &Clock, command: usize) -> bool {
             }
         }
         115 => {
-            let initial = String::from_utf16_lossy(&duration_label(u64::from(state.duration)));
-            if let Some(duration) = input(window, Kind::Duration, &initial) {
+            if let Some(duration) = edit_duration(window, state.duration) {
                 state.duration = duration;
                 reset_countdown = true;
             }
@@ -177,19 +176,7 @@ pub fn command(window: HWND, clock: &Clock, command: usize) -> bool {
                 );
                 return true;
             };
-            let local = local_time();
-            let initial = format!("{:02}:{:02}", local.wHour, local.wMinute);
-            if let Some(minute) = input(window, Kind::Alarm, &initial) {
-                let minute = minute as u16;
-                if state
-                    .alarms
-                    .iter()
-                    .flatten()
-                    .any(|alarm| alarm.minute == minute)
-                {
-                    warning(window, w!("An alarm is already set for that time."));
-                    return true;
-                }
+            if let Some(minute) = edit_alarm(window, &state.alarms, slot) {
                 state.alarms[slot] = Some(Alarm {
                     minute,
                     enabled: true,
@@ -238,7 +225,7 @@ pub fn command(window: HWND, clock: &Clock, command: usize) -> bool {
     true
 }
 
-fn local_time() -> SYSTEMTIME {
+pub(crate) fn local_time() -> SYSTEMTIME {
     let mut local = SYSTEMTIME::default();
     unsafe {
         GetLocalTime(&mut local);
@@ -246,13 +233,13 @@ fn local_time() -> SYSTEMTIME {
     local
 }
 
-fn warning(window: HWND, text: PCWSTR) {
+pub(crate) fn warning(window: HWND, text: PCWSTR) {
     unsafe {
         MessageBoxW(window, text, w!("Desktop Clock"), MB_OK | MB_ICONWARNING);
     }
 }
 
-fn choose_font(window: HWND, current: FaceName) -> Option<FaceName> {
+pub(crate) fn choose_font(window: HWND, current: FaceName) -> Option<FaceName> {
     let mut font = LOGFONTW {
         lfHeight: -27,
         lfFaceName: current.0,
@@ -284,7 +271,7 @@ fn choose_font(window: HWND, current: FaceName) -> Option<FaceName> {
 #[derive(Clone, Copy)]
 enum Kind {
     Duration,
-    Alarm,
+    Alarm(bool),
 }
 
 struct Input {
@@ -296,7 +283,14 @@ struct Input {
 fn input(owner: HWND, kind: Kind, initial: &str) -> Option<u32> {
     let (title, hint) = match kind {
         Kind::Duration => ("Set countdown duration", "Duration (HH:MM:SS)"),
-        Kind::Alarm => ("Add daily alarm", "Local time (HH:MM, 24-hour)"),
+        Kind::Alarm(editing) => (
+            if editing {
+                "Edit daily alarm"
+            } else {
+                "Add daily alarm"
+            },
+            "Local time (HH:MM, 24-hour)",
+        ),
     };
     let template = dialog_template(title, hint);
     let mut input = Input {
@@ -338,7 +332,7 @@ unsafe extern "system" fn input_proc(
                 let text = String::from_utf16_lossy(&text[..len as usize]);
                 input.result = match input.kind {
                     Kind::Duration => parse_duration(&text),
-                    Kind::Alarm => parse_alarm(&text).map(u32::from),
+                    Kind::Alarm(_) => parse_alarm(&text).map(u32::from),
                 };
                 if input.result.is_some() {
                     EndDialog(window, 1);
@@ -348,7 +342,7 @@ unsafe extern "system" fn input_proc(
                         ERROR,
                         match input.kind {
                             Kind::Duration => w!("Enter a duration from 00:00:01 to 99:59:59."),
-                            Kind::Alarm => w!("Enter a time from 00:00 to 23:59."),
+                            Kind::Alarm(_) => w!("Enter a time from 00:00 to 23:59."),
                         },
                     );
                 }
@@ -419,4 +413,30 @@ fn push_style(words: &mut Vec<u16>, style: u32) {
 
 fn wide(text: &str) -> Vec<u16> {
     text.encode_utf16().chain([0]).collect()
+}
+
+pub(crate) fn edit_duration(window: HWND, duration: u32) -> Option<u32> {
+    let initial = String::from_utf16_lossy(&duration_label(u64::from(duration)));
+    input(window, Kind::Duration, &initial)
+}
+
+pub(crate) fn edit_alarm(
+    window: HWND,
+    alarms: &[Option<Alarm>; ALARM_LIMIT],
+    slot: usize,
+) -> Option<u16> {
+    let existing = alarms[slot];
+    let local = local_time();
+    let initial = existing.map_or(local.wHour * 60 + local.wMinute, |alarm| alarm.minute);
+    let text = format!("{:02}:{:02}", initial / 60, initial % 60);
+    let minute = input(window, Kind::Alarm(existing.is_some()), &text)? as u16;
+    if alarms
+        .iter()
+        .enumerate()
+        .any(|(index, alarm)| index != slot && alarm.is_some_and(|alarm| alarm.minute == minute))
+    {
+        warning(window, w!("An alarm is already set for that time."));
+        return None;
+    }
+    Some(minute)
 }

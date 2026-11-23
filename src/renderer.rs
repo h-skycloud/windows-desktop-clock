@@ -237,6 +237,16 @@ pub fn preview(dc: HDC, bounds: RECT, dpi: u32, settings: Settings) {
     let Some(layer) = frame(settings, dpi, &sample[..groups(settings) * 3 - 1]) else {
         return;
     };
+    blend_preview(dc, bounds, &layer);
+}
+
+pub fn preview_panel(dc: HDC, bounds: RECT, dpi: u32, settings: Settings, panel: Panel<'_>) {
+    if let Some(layer) = panel_frame(settings, dpi, panel) {
+        blend_preview(dc, bounds, &layer);
+    }
+}
+
+fn blend_preview(dc: HDC, bounds: RECT, layer: &Surface) {
     let width = bounds.right - bounds.left;
     let height = bounds.bottom - bounds.top;
     let factor = (f64::from(width) / f64::from(layer.size.cx))

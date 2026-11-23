@@ -150,7 +150,11 @@ impl Options {
                 "Appearance",
                 "Preview the clock’s type, colors, and transparency.",
             ),
-            _ => ("Position", "Drag the clock or dock it to a screen edge."),
+            2 => ("Position", "Drag the clock or dock it to a screen edge."),
+            _ => (
+                "Timers & Alarms",
+                "Style the timer panels and manage daily alarms.",
+            ),
         };
         canvas.text(
             heading,
@@ -166,7 +170,8 @@ impl Options {
                 canvas.fill(rect(232, 249, 618, 1), BORDER);
             }
             1 => self.paint_style(&canvas, damage),
-            _ => self.paint_placement(&canvas),
+            2 => self.paint_placement(&canvas),
+            _ => self.paint_timers(&canvas, damage),
         }
         let focused = unsafe { GetFocus() };
         for child in self.controls.borrow().iter() {
@@ -179,6 +184,45 @@ impl Options {
                 canvas.round(child.rect, 10, PAPER, stroke);
             }
         }
+    }
+
+    fn paint_timers(&self, canvas: &Canvas<'_>, damage: RECT) {
+        let settings = self.draft.get();
+        for (x, title, style, seconds) in [
+            (214, "Stopwatch", settings.timers.stopwatch, 83),
+            (
+                547,
+                "Countdown",
+                settings.timers.countdown,
+                u64::from(settings.timers.duration),
+            ),
+        ] {
+            canvas.card(rect(x, 169, 321, 201));
+            canvas.icon(Icon::Clock, rect(x + 18, 180, 19, 27), ACCENT_INK);
+            canvas.label(title, rect(x + 46, 180, 252, 27), TEXT);
+            let preview = scaled(rect(x + 20, 301, 281, 57), canvas.dpi);
+            if intersects(preview, damage) {
+                renderer::preview_panel(
+                    canvas.dc,
+                    preview,
+                    canvas.dpi,
+                    settings,
+                    renderer::Panel {
+                        title,
+                        digits: crate::timers::duration_label(seconds),
+                        style,
+                    },
+                );
+            }
+        }
+        canvas.card(rect(214, 384, 654, 127));
+        canvas.icon(Icon::Clock, rect(232, 393, 19, 25), ACCENT_INK);
+        canvas.label("Daily alarms", rect(258, 393, 590, 25), TEXT);
+        canvas.small(
+            "Alarms use local time while the clock is running and Windows is awake.",
+            rect(232, 470, 610, 27),
+            MUTED,
+        );
     }
 
     fn paint_style(&self, canvas: &Canvas<'_>, damage: RECT) {
@@ -323,25 +367,62 @@ impl Options {
         let fonts = self.fonts.borrow();
         let s = |value| scale(value, dpi);
         let draft = self.draft.get();
-        let label = match id {
-            NAV..=102 => ["General", "Appearance", "Position"][id - NAV],
+        let dynamic = match id {
+            WATCH_FONT => Some(draft.timers.stopwatch.font.name()),
+            COUNT_FONT => Some(draft.timers.countdown.font.name()),
+            COUNT_DURATION => Some(String::from_utf16_lossy(&crate::timers::duration_label(
+                u64::from(draft.timers.duration),
+            ))),
+            _ => None,
+        };
+        let label = dynamic.as_deref().unwrap_or(match id {
+            NAV..=103 => ["General", "Appearance", "Position", "Timers"][id - NAV],
             INK => "Digits",
             BACKGROUND => "Background",
             ANGLE_45 => "45°",
             CANCEL => "Cancel",
             APPLY => "Save",
+            WATCH_SHOW => {
+                if draft.timers.stopwatch.visible {
+                    "Panel visible"
+                } else {
+                    "Panel hidden"
+                }
+            }
+            COUNT_SHOW => {
+                if draft.timers.countdown.visible {
+                    "Panel visible"
+                } else {
+                    "Panel hidden"
+                }
+            }
+            WATCH_COLOR | COUNT_COLOR => "Color",
+            ALARM_ADD => "Add",
+            ALARM_EDIT => "Edit",
+            ALARM_TOGGLE => {
+                if self.selected_alarm().is_some_and(|alarm| alarm.enabled) {
+                    "Disable"
+                } else {
+                    "Enable"
+                }
+            }
+            ALARM_REMOVE => "Remove",
             _ => "",
-        };
+        });
         let pressed = state & ODS_SELECTED != 0;
         let focused = state & ODS_FOCUS != 0;
-        let nav = (NAV..=102).contains(&id);
+        let nav = (NAV..=103).contains(&id);
         fill(dc, bounds, if nav { SIDEBAR } else { PAPER });
         let border = if focused { ACCENT_BUTTON } else { FIELD_BORDER };
-        let mut ink = TEXT;
+        let mut ink = if state & ODS_DISABLED != 0 {
+            MUTED
+        } else {
+            TEXT
+        };
         let mut content = bounds;
         let mut align = DT_CENTER;
         match id {
-            NAV..=102 => {
+            NAV..=103 => {
                 let active = self.page.get() == id - NAV;
                 let background = if active {
                     ACCENT_PAPER
@@ -367,7 +448,7 @@ impl Options {
                         ACCENT,
                     );
                 }
-                let symbol = [Icon::Settings, Icon::Palette, Icon::Display][id - NAV];
+                let symbol = [Icon::Settings, Icon::Palette, Icon::Display, Icon::Clock][id - NAV];
                 glyph(
                     dc,
                     fonts.icon,
@@ -447,7 +528,7 @@ impl Options {
                 );
                 return;
             }
-            INK | BACKGROUND => {
+            INK | BACKGROUND | WATCH_COLOR | COUNT_COLOR => {
                 rounded(
                     dc,
                     bounds,
@@ -455,10 +536,11 @@ impl Options {
                     if pressed { SUBTLE } else { PAPER },
                     border,
                 );
-                let color = if id == INK {
-                    draft.appearance.ink
-                } else {
-                    draft.appearance.background
+                let color = match id {
+                    INK => draft.appearance.ink,
+                    BACKGROUND => draft.appearance.background,
+                    WATCH_COLOR => draft.timers.stopwatch.color,
+                    _ => draft.timers.countdown.color,
                 };
                 rounded(
                     dc,
@@ -473,6 +555,25 @@ impl Options {
                     BORDER,
                 );
                 content.left += s(38);
+                align = DT_LEFT;
+            }
+            WATCH_FONT | COUNT_FONT | COUNT_DURATION => {
+                rounded(
+                    dc,
+                    bounds,
+                    s(10),
+                    if pressed { SUBTLE } else { PAPER },
+                    border,
+                );
+                glyph(
+                    dc,
+                    fonts.icon,
+                    Icon::Down,
+                    left_cell(bounds, bounds.right - s(25), s(20)),
+                    MUTED,
+                );
+                content.left += s(10);
+                content.right -= s(26);
                 align = DT_LEFT;
             }
             APPLY => {

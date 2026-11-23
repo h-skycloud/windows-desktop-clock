@@ -580,6 +580,7 @@ fn close_options(window: HWND, dialog: HWND) {
 fn apply_options(
     window: HWND,
     mut settings: Settings,
+    original_timers: timers::TimerSettings,
     change_startup: Option<bool>,
 ) -> std::io::Result<()> {
     let clock = unsafe { (GetWindowLongPtrW(window, GWLP_USERDATA) as *const Clock).as_ref() };
@@ -587,7 +588,7 @@ fn apply_options(
         return Err(std::io::ErrorKind::NotFound.into());
     };
     let old = clock.settings.get();
-    settings.timers = old.timers;
+    settings.timers = settings.timers.merge(original_timers, old.timers)?;
     if let Some(enable) = change_startup {
         startup::set(enable)?;
     }
@@ -600,6 +601,20 @@ fn apply_options(
         return Err(error);
     }
     clock.settings.set(settings);
+    if settings.timers.duration != old.timers.duration {
+        clock.countdown.set(timers::Countdown::default());
+    }
+    if settings.timers.alarms != old.timers.alarms {
+        let local = timer_ui::local_time();
+        let mut history = clock.alarm_history.borrow_mut();
+        for (slot, alarm) in settings.timers.alarms.iter().enumerate() {
+            if *alarm != old.timers.alarms[slot]
+                && let Some(alarm) = alarm
+            {
+                history.changed(slot, &local, alarm.minute);
+            }
+        }
+    }
     if settings.position != old.position
         || (settings.position == Position::Custom && settings.placement != old.placement)
     {

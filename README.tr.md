@@ -10,6 +10,8 @@ Windows 11 için Rust ve yerel Win32 API’leriyle yazılmış hafif bir masaüs
 
 ## Kronometre, geri sayım ve alarmlar
 
+**Options → Timers** bölümünde panellerin yazı tipini, rengini ve görünürlüğünü değiştirebilir, değişiklikleri önizleyebilir, geri sayım süresini ayarlayabilir ve günlük alarmları yönetebilirsin. **Save** değişiklikleri uygular. Yeni bir süre kaydettiğinde geri sayım sıfırlanır.
+
 - Saatin altındaki **Stopwatch** veya **Countdown** paneline tıklayarak sayacı başlatabilir, duraklatabilir veya sürdürebilirsin. Sağ tık menüsünden sayacı sıfırlayabilir, yazı tipini ve rengini değiştirebilir ya da paneli gizleyebilirsin.
 - **Countdown → Set duration** üzerinden `SS:DD:ss` biçiminde saat, dakika ve saniye gir. Geri sayım bittiğinde bir Windows bildirimi görünür.
 - **Alarms → Add daily alarm** üzerinden 24 saat biçiminde yerel saati gir. Alarmın alt menüsünden alarmı açabilir, kapatabilir veya silebilirsin. Alarmlar uygulama çalışırken ve Windows uyanıkken her gün tekrarlanır.
