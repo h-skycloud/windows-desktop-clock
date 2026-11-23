@@ -5,10 +5,12 @@ mod options;
 mod renderer;
 mod settings;
 mod startup;
+mod timer_ui;
+mod timers;
 
 use settings::{Position, Settings, TRANSPARENCY_LEVELS};
 use std::{
-    cell::Cell,
+    cell::{Cell, RefCell},
     ptr::{null, null_mut},
 };
 use windows_sys::{
@@ -22,7 +24,8 @@ use windows_sys::{
             MONITORINFO, MonitorFromPoint, MonitorFromWindow,
         },
         System::{
-            LibraryLoader::GetModuleHandleW, SystemInformation::GetLocalTime,
+            LibraryLoader::GetModuleHandleW,
+            SystemInformation::{GetLocalTime, GetTickCount64},
             Threading::CreateMutexW,
         },
         UI::{HiDpi::*, WindowsAndMessaging::*},
@@ -33,6 +36,7 @@ use windows_sys::{
 
 const MARGIN: i32 = 24;
 const CLOCK_TIMER: usize = 1;
+const TIMER_ALERT: u32 = WM_APP + 1;
 const SECONDS_COMMAND: usize = 1;
 const CLOSE_COMMAND: usize = 2;
 const OPTIONS_COMMAND: usize = 3;
@@ -53,6 +57,12 @@ struct Clock {
     settings: Cell<Settings>,
     follows_anchor: Cell<bool>,
     options: Cell<HWND>,
+    stopwatch: Cell<timers::Stopwatch>,
+    countdown: Cell<timers::Countdown>,
+    alarm_history: RefCell<timers::AlarmHistory>,
+    alarm_alert: Cell<Option<u16>>,
+    countdown_alert: Cell<bool>,
+    alert_open: Cell<bool>,
 }
 
 fn main() {
@@ -78,6 +88,12 @@ unsafe fn run() {
         settings: Cell::new(settings),
         follows_anchor: Cell::new(settings.position != Position::Last),
         options: Cell::new(null_mut()),
+        stopwatch: Cell::default(),
+        countdown: Cell::default(),
+        alarm_history: RefCell::default(),
+        alarm_alert: Cell::default(),
+        countdown_alert: Cell::default(),
+        alert_open: Cell::default(),
     };
     unsafe {
         SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
@@ -117,7 +133,7 @@ unsafe fn run() {
         // The state lives on this stack until the window and its message loop are gone.
         SetWindowLongPtrW(window, GWLP_USERDATA, (&raw const clock) as isize);
         reposition(window, &clock);
-        if !refresh(window, settings) {
+        if !refresh(window, &clock) {
             DestroyWindow(window);
             return;
         }
@@ -152,18 +168,18 @@ unsafe extern "system" fn window_proc(
         let settings = clock.settings.get();
         match message {
             WM_TIMER if wparam == CLOCK_TIMER => {
-                refresh(window, settings);
+                refresh(window, clock);
             }
             WM_TIMECHANGE => {
-                refresh(window, settings);
+                refresh(window, clock);
             }
             WM_POWERBROADCAST if wparam == PBT_APMRESUMEAUTOMATIC as usize => {
-                refresh(window, settings);
+                refresh(window, clock);
                 return 1;
             }
             WM_DISPLAYCHANGE | WM_SETTINGCHANGE => {
                 reposition(window, clock);
-                refresh(window, settings);
+                refresh(window, clock);
             }
             WM_ENTERSIZEMOVE => {
                 clock.follows_anchor.set(false);
@@ -191,10 +207,30 @@ unsafe extern "system" fn window_proc(
                     },
                     size,
                 );
-                refresh(window, settings);
+                refresh(window, clock);
             }
-            WM_NCHITTEST => return HTCAPTION as LRESULT,
-            WM_NCRBUTTONUP | WM_CONTEXTMENU => show_menu(window, settings),
+            WM_NCHITTEST => {
+                let screen_y = i32::from((lparam >> 16) as i16);
+                let pane = window_bounds(window).and_then(|bounds| {
+                    panel_at(screen_y - bounds.top, settings, GetDpiForWindow(window))
+                });
+                return if pane.is_some() { HTCLIENT } else { HTCAPTION } as LRESULT;
+            }
+            WM_SETCURSOR if (lparam & 0xffff) == HTCLIENT as isize => {
+                SetCursor(LoadCursorW(null_mut(), IDC_HAND));
+                return 1;
+            }
+            WM_LBUTTONUP => {
+                if let Some(command) = panel_at(
+                    i32::from((lparam >> 16) as i16),
+                    settings,
+                    GetDpiForWindow(window),
+                ) {
+                    timer_ui::command(window, clock, command);
+                }
+            }
+            WM_NCRBUTTONUP | WM_RBUTTONUP | WM_CONTEXTMENU => show_menu(window, clock),
+            TIMER_ALERT => show_alert(window, clock),
             WM_COMMAND if lparam == 0 && (wparam >> 16) == 0 => {
                 apply_menu_command(window, clock, wparam);
             }
@@ -213,16 +249,67 @@ fn scale(value: i32, dpi: u32) -> i32 {
 }
 
 fn clock_size(settings: Settings, dpi: u32) -> SIZE {
-    renderer::size(settings, dpi)
+    renderer::stack_size(settings, dpi)
 }
 
-fn refresh(window: HWND, settings: Settings) -> bool {
+fn panel_at(y: i32, settings: Settings, dpi: u32) -> Option<usize> {
+    let mut top = renderer::size(settings, dpi).cy;
+    for (style, command) in [
+        (settings.timers.stopwatch, timer_ui::WATCH_TOGGLE),
+        (settings.timers.countdown, timer_ui::COUNT_TOGGLE),
+    ] {
+        if style.visible {
+            let bottom = top + renderer::panel_stride(dpi);
+            if (top + scale(12, dpi)..bottom).contains(&y) {
+                return Some(command);
+            }
+            top = bottom;
+        }
+    }
+    None
+}
+
+fn refresh(window: HWND, clock: &Clock) -> bool {
+    let settings = clock.settings.get();
     let mut now = SYSTEMTIME::default();
     unsafe { GetLocalTime(&mut now) };
+    let tick = unsafe { GetTickCount64() };
+    let stopwatch = clock.stopwatch.get();
+    let mut countdown = clock.countdown.get();
+    let finished = countdown.finish_if_due(tick);
+    let alarm = clock
+        .alarm_history
+        .borrow_mut()
+        .due(&now, &settings.timers.alarms);
+    clock.countdown.set(countdown);
+    if finished {
+        clock.countdown_alert.set(true);
+    }
+    if let Some(alarm) = alarm {
+        clock.alarm_alert.set(Some(alarm));
+    }
+    if finished || alarm.is_some() {
+        unsafe {
+            PostMessageW(window, TIMER_ALERT, 0, 0);
+        }
+    }
     let period = if settings.seconds { 1_000 } else { 60_000 };
     let elapsed = u32::from(now.wSecond) * 1_000 + u32::from(now.wMilliseconds);
-    let delay = period - elapsed % period + 12;
-    let tolerance = if settings.seconds { 25 } else { 100 };
+    let mut delay = period - elapsed % period + 12;
+    let watched = stopwatch.elapsed(tick);
+    let remaining = countdown.remaining(tick, settings.timers.duration);
+    if stopwatch.running() && settings.timers.stopwatch.visible {
+        delay = delay.min((1000 - watched % 1000) as u32 + 8);
+    }
+    if countdown.running() {
+        let next = if settings.timers.countdown.visible {
+            (remaining - 1) % 1000 + 1
+        } else {
+            remaining
+        };
+        delay = delay.min(next as u32 + 8);
+    }
+    let tolerance = if delay <= 1012 { 25 } else { 100 };
     let timer = unsafe { SetCoalescableTimer(window, CLOCK_TIMER, delay, None, tolerance) };
 
     let digit = |value: u16| u16::from(b'0') + value;
@@ -242,7 +329,65 @@ fn refresh(window: HWND, settings: Settings) -> bool {
         dpi,
         &label[..if settings.seconds { 8 } else { 5 }],
         settings,
+        [
+            renderer::Panel {
+                title: if stopwatch.running() {
+                    "Stopwatch · pause"
+                } else if watched != 0 {
+                    "Stopwatch · resume"
+                } else {
+                    "Stopwatch · start"
+                },
+                digits: timers::duration_label(watched / 1000),
+                style: settings.timers.stopwatch,
+            },
+            renderer::Panel {
+                title: if countdown.running() {
+                    "Countdown · pause"
+                } else if countdown.finished() {
+                    "Countdown · finished"
+                } else {
+                    "Countdown · start / resume"
+                },
+                digits: timers::duration_label(remaining.div_ceil(1000)),
+                style: settings.timers.countdown,
+            },
+        ],
     ) && timer != 0
+}
+
+fn show_alert(window: HWND, clock: &Clock) {
+    if clock.alert_open.get() {
+        return;
+    }
+    let alarm = clock.alarm_alert.take();
+    let completed = clock.countdown_alert.take();
+    let message = match (alarm, completed) {
+        (Some(minute), true) => format!(
+            "Daily alarm · {:02}:{:02}\nThe countdown is complete.",
+            minute / 60,
+            minute % 60
+        ),
+        (Some(minute), false) => format!("Daily alarm · {:02}:{:02}", minute / 60, minute % 60),
+        (None, true) => String::from("The countdown is complete."),
+        (None, false) => return,
+    };
+    clock.alert_open.set(true);
+    let wide: Vec<u16> = message.encode_utf16().chain([0]).collect();
+    unsafe {
+        MessageBoxW(
+            window,
+            wide.as_ptr(),
+            w!("Desktop Clock"),
+            MB_OK | MB_ICONINFORMATION | MB_TOPMOST | MB_SETFOREGROUND,
+        );
+    }
+    clock.alert_open.set(false);
+    if clock.alarm_alert.get().is_some() || clock.countdown_alert.get() {
+        unsafe {
+            PostMessageW(window, TIMER_ALERT, 0, 0);
+        }
+    }
 }
 
 fn startup_origin(settings: Settings, size: SIZE, dpi: u32) -> POINT {
@@ -434,7 +579,7 @@ fn close_options(window: HWND, dialog: HWND) {
 
 fn apply_options(
     window: HWND,
-    settings: Settings,
+    mut settings: Settings,
     change_startup: Option<bool>,
 ) -> std::io::Result<()> {
     let clock = unsafe { (GetWindowLongPtrW(window, GWLP_USERDATA) as *const Clock).as_ref() };
@@ -442,6 +587,7 @@ fn apply_options(
         return Err(std::io::ErrorKind::NotFound.into());
     };
     let old = clock.settings.get();
+    settings.timers = old.timers;
     if let Some(enable) = change_startup {
         startup::set(enable)?;
     }
@@ -462,11 +608,14 @@ fn apply_options(
             .set(settings.position != Position::Last);
     }
     reposition(window, clock);
-    refresh(window, settings);
+    refresh(window, clock);
     Ok(())
 }
 
 fn apply_menu_command(window: HWND, clock: &Clock, command: usize) {
+    if timer_ui::command(window, clock, command) {
+        return;
+    }
     let mut settings = clock.settings.get();
     match command {
         CLOSE_COMMAND => {
@@ -503,14 +652,15 @@ fn apply_menu_command(window: HWND, clock: &Clock, command: usize) {
         _ => return,
     }
     save_settings(window, clock, settings);
-    refresh(window, settings);
+    refresh(window, clock);
 }
 
 fn checked(selected: bool) -> u32 {
     if selected { MF_CHECKED } else { MF_UNCHECKED }
 }
 
-fn show_menu(window: HWND, settings: Settings) {
+fn show_menu(window: HWND, clock: &Clock) {
+    let settings = clock.settings.get();
     unsafe {
         let mut cursor = POINT::default();
         if GetCursorPos(&mut cursor) == 0 {
@@ -560,6 +710,8 @@ fn show_menu(window: HWND, settings: Settings) {
                 DestroyMenu(positions);
             }
         }
+        AppendMenuW(menu, MF_SEPARATOR, 0, null());
+        timer_ui::append(menu, clock);
         AppendMenuW(menu, MF_SEPARATOR, 0, null());
         AppendMenuW(menu, MF_STRING, OPTIONS_COMMAND, w!("Options…"));
         AppendMenuW(menu, MF_STRING, CLOSE_COMMAND, w!("Close"));

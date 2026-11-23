@@ -1,4 +1,5 @@
 use crate::settings::{Appearance, Settings};
+use crate::timers::PanelStyle;
 use std::ptr::{null, null_mut};
 use windows_sys::Win32::{
     Foundation::{HANDLE, HWND, POINT, RECT, SIZE},
@@ -41,6 +42,30 @@ impl Drop for ClockFont {
 
 pub fn size(settings: Settings, dpi: u32) -> SIZE {
     rotated_size(base_size(settings, dpi), settings.placement.angle)
+}
+
+pub struct Panel<'a> {
+    pub title: &'a str,
+    pub digits: [u16; 8],
+    pub style: PanelStyle,
+}
+
+pub fn stack_size(settings: Settings, dpi: u32) -> SIZE {
+    let mut stack = size(settings, dpi);
+    for visible in [
+        settings.timers.stopwatch.visible,
+        settings.timers.countdown.visible,
+    ] {
+        if visible {
+            stack.cx = stack.cx.max(super::scale(204, dpi));
+            stack.cy += panel_stride(dpi);
+        }
+    }
+    stack
+}
+
+pub fn panel_stride(dpi: u32) -> i32 {
+    super::scale(12, dpi) + super::scale(66, dpi)
 }
 
 fn base_size(settings: Settings, dpi: u32) -> SIZE {
@@ -86,10 +111,112 @@ fn rotated_size(size: SIZE, angle: i16) -> SIZE {
     }
 }
 
-pub fn present(window: HWND, dpi: u32, label: &[u16], settings: Settings) -> bool {
-    let Some(surface) = frame(settings, dpi, label) else {
+pub fn present(
+    window: HWND,
+    dpi: u32,
+    label: &[u16],
+    settings: Settings,
+    panels: [Panel<'_>; 2],
+) -> bool {
+    let Some(clock) = frame(settings, dpi, label) else {
         return false;
     };
+    if !panels.iter().any(|panel| panel.style.visible) {
+        return submit(window, &clock);
+    }
+    let Some(mut stack) = Surface::new(stack_size(settings, dpi)) else {
+        return false;
+    };
+    stack.pixels_mut().fill(0);
+    copy_into(&mut stack, &clock, 0);
+    let mut top = clock.size.cy;
+    for panel in panels.into_iter().filter(|panel| panel.style.visible) {
+        let Some(card) = panel_frame(settings, dpi, panel) else {
+            return false;
+        };
+        copy_into(&mut stack, &card, top + super::scale(12, dpi));
+        top += panel_stride(dpi);
+    }
+    submit(window, &stack)
+}
+
+fn copy_into(stack: &mut Surface, source: &Surface, top: i32) {
+    let width = stack.size.cx as usize;
+    let stride = source.size.cx as usize;
+    let left = (width - stride) / 2;
+    for (row, pixels) in source.pixels().chunks_exact(stride).enumerate() {
+        let start = (top as usize + row) * width + left;
+        stack.pixels_mut()[start..start + stride].copy_from_slice(pixels);
+    }
+}
+
+fn panel_frame(mut settings: Settings, dpi: u32, panel: Panel<'_>) -> Option<Surface> {
+    let size = SIZE {
+        cx: super::scale(204, dpi),
+        cy: super::scale(66, dpi),
+    };
+    let mut surface = Surface::new(size)?;
+    let dc = surface.dc;
+    unsafe {
+        PatBlt(dc, 0, 0, size.cx, size.cy, BLACKNESS);
+        SetBkMode(dc, TRANSPARENT as i32);
+        SetTextColor(dc, 0x00ff_ffff);
+    }
+    let mut title = [0; 32];
+    let mut count = 0;
+    for (slot, unit) in title.iter_mut().zip(panel.title.encode_utf16()) {
+        *slot = unit;
+        count += 1;
+    }
+    let caption = Appearance {
+        font: crate::settings::FaceName::new("Segoe UI"),
+        ..settings.appearance
+    };
+    draw(
+        dc,
+        &title[..count],
+        RECT {
+            right: size.cx,
+            top: super::scale(5, dpi),
+            bottom: super::scale(25, dpi),
+            ..Default::default()
+        },
+        dpi,
+        12,
+        caption,
+    );
+    settings.appearance.font = panel.style.font;
+    settings.appearance.ink = panel.style.color;
+    settings.transparency = 0;
+    draw(
+        dc,
+        &panel.digits,
+        RECT {
+            right: size.cx,
+            top: super::scale(23, dpi),
+            bottom: size.cy - super::scale(4, dpi),
+            ..Default::default()
+        },
+        dpi,
+        27,
+        settings.appearance,
+    );
+    unsafe { GdiFlush() };
+    let palette = palette(settings);
+    let pixels = surface.pixels_mut();
+    for pixel in &mut *pixels {
+        *pixel = palette[(*pixel & 0xff) as usize];
+    }
+    round_corners(
+        pixels,
+        size.cx as usize,
+        size.cy as usize,
+        super::scale(12, dpi) as usize,
+    );
+    Some(surface)
+}
+
+fn submit(window: HWND, surface: &Surface) -> bool {
     unsafe {
         UpdateLayeredWindow(
             window,
@@ -148,9 +275,11 @@ fn frame(settings: Settings, dpi: u32, label: &[u16]) -> Option<Surface> {
         draw(
             dc,
             label,
-            0,
-            dimensions.cx,
-            dimensions.cy,
+            RECT {
+                right: dimensions.cx,
+                bottom: dimensions.cy,
+                ..Default::default()
+            },
             dpi,
             sizes[0],
             settings.appearance,
@@ -171,9 +300,12 @@ fn frame(settings: Settings, dpi: u32, label: &[u16]) -> Option<Surface> {
             draw(
                 dc,
                 &label[offset..offset + len],
-                x,
-                width,
-                dimensions.cy,
+                RECT {
+                    left: x,
+                    right: x + width,
+                    bottom: dimensions.cy,
+                    ..Default::default()
+                },
                 dpi,
                 size,
                 settings.appearance,
@@ -201,13 +333,10 @@ fn frame(settings: Settings, dpi: u32, label: &[u16]) -> Option<Surface> {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
 fn draw(
     dc: HDC,
     label: &[u16],
-    left: i32,
-    width: i32,
-    height: i32,
+    mut bounds: RECT,
     dpi: u32,
     font_size: u16,
     appearance: Appearance,
@@ -233,12 +362,6 @@ fn draw(
     if font.is_null() {
         return;
     }
-    let mut bounds = RECT {
-        left,
-        right: left + width,
-        bottom: height,
-        ..Default::default()
-    };
     unsafe {
         let old_font = SelectObject(dc, font);
         DrawTextW(

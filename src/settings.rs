@@ -1,3 +1,4 @@
+use crate::timers::{Alarm, MAX_COUNTDOWN, PanelStyle, TimerSettings};
 use std::{env, fs, path::PathBuf};
 
 pub const TRANSPARENCY_LEVELS: [u8; 5] = [0, 25, 50, 75, 100];
@@ -95,6 +96,7 @@ pub struct Settings {
     pub last_origin: Option<(i32, i32)>,
     pub appearance: Appearance,
     pub placement: Placement,
+    pub timers: TimerSettings,
 }
 
 impl Settings {
@@ -154,6 +156,23 @@ impl Settings {
                 "y" => read_range(value, &mut settings.placement.y, 0, 1000),
                 "inset" => read_range(value, &mut settings.placement.inset, 0, 120),
                 "angle" => read_range(value, &mut settings.placement.angle, -180, 180),
+                "stopwatch" => read_panel(value, &mut settings.timers.stopwatch),
+                "countdown" => read_panel(value, &mut settings.timers.countdown),
+                "countdown_duration" => {
+                    read_range(value, &mut settings.timers.duration, 1, MAX_COUNTDOWN)
+                }
+                "alarm" => {
+                    let alarms = &mut settings.timers.alarms;
+                    if let Some((minute, enabled)) = value.split_once(',')
+                        && let (Ok(minute), Ok(enabled)) =
+                            (minute.parse::<u16>(), enabled.parse::<bool>())
+                        && minute < 1440
+                        && !alarms.iter().flatten().any(|alarm| alarm.minute == minute)
+                        && let Some(slot) = alarms.iter_mut().find(|entry| entry.is_none())
+                    {
+                        *slot = Some(Alarm { minute, enabled });
+                    }
+                }
                 _ => {}
             }
         }
@@ -174,7 +193,7 @@ impl Settings {
             .unwrap_or(Position::ALL.len());
         let appearance = self.appearance;
         let placement = self.placement;
-        let contents = format!(
+        let mut contents = format!(
             "transparency={}\nseconds={}\nposition={}\nlast_origin={}\nhours_size={}\nminutes_size={}\nseconds_size={}\nfont={}\nink={:06X}\nbackground={:06X}\nmonitor={}\nx={}\ny={}\ninset={}\nangle={}\n",
             self.transparency,
             self.seconds,
@@ -192,10 +211,41 @@ impl Settings {
             placement.inset,
             placement.angle,
         );
+        use std::fmt::Write;
+        for (key, panel) in [
+            ("stopwatch", self.timers.stopwatch),
+            ("countdown", self.timers.countdown),
+        ] {
+            let _ = writeln!(
+                contents,
+                "{key}={},{:06X},{}",
+                panel.visible,
+                panel.color,
+                panel.font.name()
+            );
+        }
+        let _ = writeln!(contents, "countdown_duration={}", self.timers.duration);
+        for alarm in self.timers.alarms.into_iter().flatten() {
+            let _ = writeln!(contents, "alarm={},{}", alarm.minute, alarm.enabled);
+        }
         fs::create_dir_all(path.parent().expect("settings directory"))?;
         let temporary = path.with_extension("tmp");
         fs::write(&temporary, contents)?;
         fs::rename(temporary, path)
+    }
+}
+
+fn read_panel(line: &str, panel: &mut PanelStyle) {
+    let mut fields = line.splitn(3, ',');
+    if let (Some(visible), Some(color), Some(font)) = (fields.next(), fields.next(), fields.next())
+    {
+        if let Ok(visible) = visible.parse() {
+            panel.visible = visible;
+        }
+        read_color(color, &mut panel.color);
+        if !font.is_empty() {
+            panel.font = FaceName::new(font);
+        }
     }
 }
 

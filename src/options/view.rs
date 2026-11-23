@@ -265,7 +265,7 @@ impl Options {
                 );
             }
             if let Some(screen) = selected {
-                let size = renderer::size(settings, 96);
+                let size = renderer::stack_size(settings, 96);
                 let origin = displays::place(screen.work, size, placement, 96);
                 let bounds = map.project(rect(origin.x, origin.y, size.cx, size.cy));
                 let display = inset(map.project(screen.area), scale(2, canvas.dpi));

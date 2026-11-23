@@ -418,7 +418,12 @@ impl Options {
                     face.0.as_ptr() as LPARAM,
                 );
             }
-            SendMessageW(self.control(DOCK), CB_ADDSTRING, 0, w!("Free placement") as LPARAM);
+            SendMessageW(
+                self.control(DOCK),
+                CB_ADDSTRING,
+                0,
+                w!("Free placement") as LPARAM,
+            );
             for (label, _, _) in DOCKS {
                 SendMessageW(self.control(DOCK), CB_ADDSTRING, 0, label as LPARAM);
             }
@@ -770,7 +775,7 @@ impl Options {
         let mut draft = self.draft.get();
         draft.placement.monitor = display.id;
         draft.position = Position::Custom;
-        let size = renderer::size(draft, 96);
+        let size = renderer::stack_size(draft, 96);
         let origin = POINT {
             x: desktop.x - size.cx / 2,
             y: desktop.y - size.cy / 2,
@@ -886,7 +891,7 @@ unsafe extern "system" fn collect_faces(
     1
 }
 
-fn pick_color(window: HWND, current: u32) -> Option<u32> {
+pub(crate) fn pick_color(window: HWND, current: u32) -> Option<u32> {
     let mut swatches = [0x00ff_ffff; 16];
     let mut dialog = CHOOSECOLORW {
         lStructSize: size_of::<CHOOSECOLORW>() as u32,
