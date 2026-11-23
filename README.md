@@ -10,7 +10,7 @@ Run `MasaustuSaati.exe`. The clock opens at the top center of the primary displa
 
 ## Stopwatch, countdown, and alarms
 
-Open **Options → Timers** to edit the panels' fonts, colors, and visibility, preview your changes, set the countdown duration, or add, edit, disable, and remove daily alarms. Select **Save** to apply the changes. Saving a different duration resets the countdown.
+Open **Options → Timers** to preview and edit each panel's font, digit color, background color, transparency, and visibility. At 100% transparency, only the panel text is visible. Click the text to start or pause the timer. This tab also lets you set the countdown duration and manage daily alarms. Select **Save** to apply the changes. Saving a different duration resets the countdown.
 
 - Select the **Stopwatch** or **Countdown** panel beneath the clock to start, pause, or resume it. Open the matching right-click submenu to reset the timer, change its font or color, or hide its panel.
 - Set a countdown duration in `HH:MM:SS` format under **Countdown → Set duration**. The clock shows a Windows alert when the countdown ends.

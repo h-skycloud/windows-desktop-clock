@@ -187,7 +187,11 @@ fn panel_frame(mut settings: Settings, dpi: u32, panel: Panel<'_>) -> Option<Sur
     );
     settings.appearance.font = panel.style.font;
     settings.appearance.ink = panel.style.color;
-    settings.transparency = 0;
+    settings.appearance.background = panel
+        .style
+        .background
+        .unwrap_or(settings.appearance.background);
+    settings.transparency = panel.style.transparency;
     draw(
         dc,
         &panel.digits,

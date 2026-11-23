@@ -9,6 +9,8 @@ pub struct PanelStyle {
     pub visible: bool,
     pub font: FaceName,
     pub color: u32,
+    pub background: Option<u32>,
+    pub transparency: u8,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -31,6 +33,8 @@ impl Default for TimerSettings {
             visible: true,
             font: FaceName::new("Space Mono"),
             color: 0xe5f8e5,
+            background: None,
+            transparency: 0,
         };
         Self {
             stopwatch: panel,
@@ -70,6 +74,12 @@ fn merge_panel(draft: PanelStyle, original: PanelStyle, latest: PanelStyle) -> P
         visible: keep_edit(draft.visible, original.visible, latest.visible),
         font: keep_edit(draft.font, original.font, latest.font),
         color: keep_edit(draft.color, original.color, latest.color),
+        background: keep_edit(draft.background, original.background, latest.background),
+        transparency: keep_edit(
+            draft.transparency,
+            original.transparency,
+            latest.transparency,
+        ),
     }
 }
 

@@ -9,11 +9,15 @@ pub(super) const COUNT_SHOW: usize = 143;
 pub(super) const COUNT_FONT: usize = 144;
 pub(super) const COUNT_COLOR: usize = 145;
 pub(super) const COUNT_DURATION: usize = 146;
+pub(super) const WATCH_BACKGROUND: usize = 147;
+pub(super) const COUNT_BACKGROUND: usize = 148;
 pub(super) const ALARM_LIST: usize = 150;
 pub(super) const ALARM_ADD: usize = 151;
 pub(super) const ALARM_EDIT: usize = 152;
 pub(super) const ALARM_TOGGLE: usize = 153;
 pub(super) const ALARM_REMOVE: usize = 154;
+pub(super) const WATCH_TRANSPARENCY: usize = 155;
+pub(super) const COUNT_TRANSPARENCY: usize = 156;
 
 impl Options {
     pub(super) fn create_timer_controls(&self, window: HWND) {
@@ -54,17 +58,27 @@ impl Options {
                 w!("Set countdown duration"),
                 view::rect(707, 257, 142, 32),
             ),
-            (ALARM_ADD, w!("Add alarm"), view::rect(479, 428, 84, 32)),
-            (ALARM_EDIT, w!("Edit alarm"), view::rect(573, 428, 76, 32)),
+            (
+                WATCH_BACKGROUND,
+                w!("Stopwatch background color"),
+                view::rect(232, 298, 134, 32),
+            ),
+            (
+                COUNT_BACKGROUND,
+                w!("Countdown background color"),
+                view::rect(565, 298, 134, 32),
+            ),
+            (ALARM_ADD, w!("Add alarm"), view::rect(479, 450, 84, 32)),
+            (ALARM_EDIT, w!("Edit alarm"), view::rect(573, 450, 76, 32)),
             (
                 ALARM_TOGGLE,
                 w!("Enable or disable alarm"),
-                view::rect(659, 428, 90, 32),
+                view::rect(659, 450, 90, 32),
             ),
             (
                 ALARM_REMOVE,
                 w!("Remove alarm"),
-                view::rect(759, 428, 90, 32),
+                view::rect(759, 450, 90, 32),
             ),
         ] {
             self.add(
@@ -84,8 +98,19 @@ impl Options {
             w!("COMBOBOX"),
             null(),
             CBS_DROPDOWNLIST as u32 | WS_VSCROLL,
-            view::rect(232, 428, 236, 260),
+            view::rect(232, 450, 236, 260),
         );
+        for (id, x) in [(WATCH_TRANSPARENCY, 471), (COUNT_TRANSPARENCY, 804)] {
+            self.add(
+                window,
+                id,
+                page,
+                w!("EDIT"),
+                null(),
+                (ES_NUMBER | ES_AUTOHSCROLL) as u32,
+                view::rect(x, 298, 45, 32),
+            );
+        }
     }
 
     fn alarm_slot(&self) -> Option<usize> {
@@ -174,7 +199,7 @@ impl Options {
             return true;
         }
         if event != BN_CLICKED
-            || !matches!(id, WATCH_SHOW..=COUNT_DURATION | ALARM_ADD..=ALARM_REMOVE)
+            || !matches!(id, WATCH_SHOW..=COUNT_BACKGROUND | ALARM_ADD..=ALARM_REMOVE)
         {
             return false;
         }
@@ -202,6 +227,17 @@ impl Options {
                 };
                 if let Some(color) = pick_color(window, panel.color) {
                     panel.color = color;
+                }
+            }
+            WATCH_BACKGROUND | COUNT_BACKGROUND => {
+                let panel = if id == WATCH_BACKGROUND {
+                    &mut timers.stopwatch
+                } else {
+                    &mut timers.countdown
+                };
+                let color = panel.background.unwrap_or(draft.appearance.background);
+                if let Some(color) = pick_color(window, color) {
+                    panel.background = Some(color);
                 }
             }
             COUNT_DURATION => {

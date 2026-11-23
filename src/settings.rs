@@ -158,6 +158,14 @@ impl Settings {
                 "angle" => read_range(value, &mut settings.placement.angle, -180, 180),
                 "stopwatch" => read_panel(value, &mut settings.timers.stopwatch),
                 "countdown" => read_panel(value, &mut settings.timers.countdown),
+                "stopwatch_background" => settings.timers.stopwatch.background = parse_color(value),
+                "countdown_background" => settings.timers.countdown.background = parse_color(value),
+                "stopwatch_transparency" => {
+                    read_range(value, &mut settings.timers.stopwatch.transparency, 0, 100)
+                }
+                "countdown_transparency" => {
+                    read_range(value, &mut settings.timers.countdown.transparency, 0, 100)
+                }
                 "countdown_duration" => {
                     read_range(value, &mut settings.timers.duration, 1, MAX_COUNTDOWN)
                 }
@@ -223,6 +231,10 @@ impl Settings {
                 panel.color,
                 panel.font.name()
             );
+            if let Some(background) = panel.background {
+                let _ = writeln!(contents, "{key}_background={background:06X}");
+            }
+            let _ = writeln!(contents, "{key}_transparency={}", panel.transparency);
         }
         let _ = writeln!(contents, "countdown_duration={}", self.timers.duration);
         for alarm in self.timers.alarms.into_iter().flatten() {
@@ -259,10 +271,16 @@ fn read_range<T: std::str::FromStr + PartialOrd>(text: &str, slot: &mut T, min: 
 }
 
 fn read_color(text: &str, slot: &mut u32) {
-    if text.len() == 6
-        && let Ok(value) = u32::from_str_radix(text, 16)
-    {
+    if let Some(value) = parse_color(text) {
         *slot = value;
+    }
+}
+
+fn parse_color(text: &str) -> Option<u32> {
+    if text.len() == 6 && text.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        u32::from_str_radix(text, 16).ok()
+    } else {
+        None
     }
 }
 

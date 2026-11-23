@@ -492,8 +492,13 @@ impl Options {
             let numeric = numeric_field(child.id);
             let mut bounds = view::scaled(child.rect, density);
             if numeric {
-                bounds.left += scale(10, density);
-                bounds.right -= scale(10, density);
+                let padding = if matches!(child.id, WATCH_TRANSPARENCY | COUNT_TRANSPARENCY) {
+                    6
+                } else {
+                    10
+                };
+                bounds.left += scale(padding, density);
+                bounds.right -= scale(padding, density);
                 bounds.top += scale(7, density);
                 bounds.bottom -= scale(6, density);
             }
@@ -554,6 +559,14 @@ impl Options {
         self.set_number(SIZE_M, draft.appearance.sizes[1].into());
         self.set_number(SIZE_S, draft.appearance.sizes[2].into());
         self.set_number(TRANSPARENCY, draft.transparency.into());
+        self.set_number(
+            WATCH_TRANSPARENCY,
+            draft.timers.stopwatch.transparency.into(),
+        );
+        self.set_number(
+            COUNT_TRANSPARENCY,
+            draft.timers.countdown.transparency.into(),
+        );
         self.set_number(INSET, draft.placement.inset.into());
         self.set_number(ANGLE, draft.placement.angle.into());
         self.set_combo(
@@ -628,7 +641,7 @@ impl Options {
             .ok()?;
         let (min, max) = match id {
             SIZE_H | SIZE_M | SIZE_S => (i32::from(MIN_DIGIT_SIZE), i32::from(MAX_DIGIT_SIZE)),
-            TRANSPARENCY => (0, 100),
+            TRANSPARENCY | WATCH_TRANSPARENCY | COUNT_TRANSPARENCY => (0, 100),
             INSET => (0, 120),
             ANGLE => (-180, 180),
             _ => return None,
@@ -642,6 +655,8 @@ impl Options {
         match id {
             SIZE_H | SIZE_M | SIZE_S => settings.appearance.sizes[id - SIZE_H] = value as u16,
             TRANSPARENCY => settings.transparency = value as u8,
+            WATCH_TRANSPARENCY => settings.timers.stopwatch.transparency = value as u8,
+            COUNT_TRANSPARENCY => settings.timers.countdown.transparency = value as u8,
             INSET => {
                 settings.placement.inset = value as u16;
                 settings.position = Position::Custom;
@@ -696,9 +711,7 @@ impl Options {
                 draft.position = Position::Custom;
                 self.draft.set(draft);
             }
-            (SIZE_H | SIZE_M | SIZE_S | TRANSPARENCY | INSET | ANGLE, EN_CHANGE) => {
-                self.number_changed(id)
-            }
+            (id, EN_CHANGE) if numeric_field(id) => self.number_changed(id),
             (ANGLE_45, BN_CLICKED) => self.set_number(ANGLE, 45),
             (INK | BACKGROUND, BN_CLICKED) => {
                 let color = if id == INK {
@@ -724,6 +737,7 @@ impl Options {
         let affected = match self.page.get() {
             1 => Some(view::PREVIEW_CARD),
             2 => Some(view::MAP_CARD),
+            TIMER_PAGE => Some(view::TIMER_CARDS),
             _ => None,
         };
         if let Some(area) = affected {
@@ -737,6 +751,7 @@ impl Options {
         for (page, ids) in [
             (1, &[SIZE_H, SIZE_M, SIZE_S, TRANSPARENCY][..]),
             (2, &[INSET, ANGLE][..]),
+            (TIMER_PAGE, &[WATCH_TRANSPARENCY, COUNT_TRANSPARENCY][..]),
         ] {
             if let Some(&id) = ids.iter().find(|&&id| self.number(id).is_none()) {
                 self.change_page(window, page, false);
@@ -812,7 +827,17 @@ impl Options {
 }
 
 fn numeric_field(id: usize) -> bool {
-    matches!(id, SIZE_H | SIZE_M | SIZE_S | TRANSPARENCY | INSET | ANGLE)
+    matches!(
+        id,
+        SIZE_H
+            | SIZE_M
+            | SIZE_S
+            | TRANSPARENCY
+            | INSET
+            | ANGLE
+            | WATCH_TRANSPARENCY
+            | COUNT_TRANSPARENCY
+    )
 }
 
 unsafe extern "system" fn combo_proc(

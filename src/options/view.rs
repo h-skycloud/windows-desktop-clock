@@ -17,6 +17,7 @@ const ACCENT_BUTTON: u32 = 0xbb421d;
 pub const PREVIEW_CARD: RECT = rect(547, 169, 321, 347);
 pub const MAP_CARD: RECT = rect(214, 169, 654, 235);
 pub const MAP_VIEW: RECT = rect(241, 218, 600, 163);
+pub const TIMER_CARDS: RECT = rect(214, 169, 654, 233);
 
 #[derive(Clone, Copy)]
 enum Icon {
@@ -197,11 +198,14 @@ impl Options {
                 u64::from(settings.timers.duration),
             ),
         ] {
-            canvas.card(rect(x, 169, 321, 201));
+            canvas.card(rect(x, 169, 321, 233));
             canvas.icon(Icon::Clock, rect(x + 18, 180, 19, 27), ACCENT_INK);
             canvas.label(title, rect(x + 46, 180, 252, 27), TEXT);
-            let preview = scaled(rect(x + 20, 301, 281, 57), canvas.dpi);
+            canvas.small("Transparency %", rect(x + 160, 298, 96, 32), MUTED);
+            let viewport = rect(x + 20, 340, 281, 49);
+            let preview = scaled(viewport, canvas.dpi);
             if intersects(preview, damage) {
+                canvas.checker(viewport);
                 renderer::preview_panel(
                     canvas.dc,
                     preview,
@@ -215,12 +219,12 @@ impl Options {
                 );
             }
         }
-        canvas.card(rect(214, 384, 654, 127));
-        canvas.icon(Icon::Clock, rect(232, 393, 19, 25), ACCENT_INK);
-        canvas.label("Daily alarms", rect(258, 393, 590, 25), TEXT);
+        canvas.card(rect(214, 413, 654, 105));
+        canvas.icon(Icon::Clock, rect(232, 419, 19, 25), ACCENT_INK);
+        canvas.label("Daily alarms", rect(258, 419, 590, 25), TEXT);
         canvas.small(
             "Alarms use local time while the clock is running and Windows is awake.",
-            rect(232, 470, 610, 27),
+            rect(232, 485, 610, 24),
             MUTED,
         );
     }
@@ -246,23 +250,7 @@ impl Options {
         canvas.label("Live preview", rect(593, 179, 255, 27), TEXT);
         let viewport = rect(565, 215, 285, 247);
         if intersects(scaled(viewport, canvas.dpi), damage) {
-            canvas.fill(viewport, 0xf7f5f1);
-            let tile = 19;
-            for row in 0..(247 + tile - 1) / tile {
-                for column in 0..(285 + tile - 1) / tile {
-                    if (row + column) % 2 == 0 {
-                        canvas.fill(
-                            rect(
-                                viewport.left + column * tile,
-                                viewport.top + row * tile,
-                                tile.min(285 - column * tile),
-                                tile.min(247 - row * tile),
-                            ),
-                            0xeeece7,
-                        );
-                    }
-                }
-            }
+            canvas.checker(viewport);
             renderer::preview(
                 canvas.dc,
                 scaled(rect(580, 224, 255, 230), canvas.dpi),
@@ -396,7 +384,8 @@ impl Options {
                     "Panel hidden"
                 }
             }
-            WATCH_COLOR | COUNT_COLOR => "Color",
+            WATCH_COLOR | COUNT_COLOR => "Digits",
+            WATCH_BACKGROUND | COUNT_BACKGROUND => "Background",
             ALARM_ADD => "Add",
             ALARM_EDIT => "Edit",
             ALARM_TOGGLE => {
@@ -528,7 +517,7 @@ impl Options {
                 );
                 return;
             }
-            INK | BACKGROUND | WATCH_COLOR | COUNT_COLOR => {
+            INK | BACKGROUND | WATCH_COLOR | COUNT_COLOR | WATCH_BACKGROUND | COUNT_BACKGROUND => {
                 rounded(
                     dc,
                     bounds,
@@ -540,7 +529,17 @@ impl Options {
                     INK => draft.appearance.ink,
                     BACKGROUND => draft.appearance.background,
                     WATCH_COLOR => draft.timers.stopwatch.color,
-                    _ => draft.timers.countdown.color,
+                    COUNT_COLOR => draft.timers.countdown.color,
+                    WATCH_BACKGROUND => draft
+                        .timers
+                        .stopwatch
+                        .background
+                        .unwrap_or(draft.appearance.background),
+                    _ => draft
+                        .timers
+                        .countdown
+                        .background
+                        .unwrap_or(draft.appearance.background),
                 };
                 rounded(
                     dc,
@@ -663,6 +662,32 @@ struct Canvas<'a> {
 }
 
 impl Canvas<'_> {
+    fn checker(&self, viewport: RECT) {
+        self.fill(viewport, 0xf7f5f1);
+        let tile = 19;
+        for (row, y) in (viewport.top..viewport.bottom)
+            .step_by(tile as usize)
+            .enumerate()
+        {
+            for (column, x) in (viewport.left..viewport.right)
+                .step_by(tile as usize)
+                .enumerate()
+            {
+                if (row + column) % 2 == 0 {
+                    self.fill(
+                        rect(
+                            x,
+                            y,
+                            tile.min(viewport.right - x),
+                            tile.min(viewport.bottom - y),
+                        ),
+                        0xeeece7,
+                    );
+                }
+            }
+        }
+    }
+
     fn fill(&self, bounds: RECT, color: u32) {
         fill(self.dc, scaled(bounds, self.dpi), color);
     }
